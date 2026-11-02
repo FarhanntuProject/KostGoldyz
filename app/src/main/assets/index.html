@@ -133,7 +133,7 @@ ul.hist{list-style:none;margin:0;padding:0}
 ul.hist li{display:grid;grid-template-columns:1fr auto;gap:0 10px;padding:8px 0;border-top:1px dashed var(--line);font-size:.88rem}
 ul.hist li:first-child{border-top:0}
 ul.hist .s{grid-column:1;font-size:.76rem;color:var(--muted)}
-ul.hist .del{grid-column:2;grid-row:1 / span 3;align-self:center;border:0;background:none;color:var(--muted);text-decoration:underline;font-size:.78rem}
+ul.hist .del{grid-column:2;grid-row:1 / span 4;align-self:center;border:0;background:none;color:var(--muted);text-decoration:underline;font-size:.78rem}
 ul.hist .del.armed{color:var(--bad);font-weight:700}
 .links{display:flex;flex-wrap:wrap;gap:8px}
 .links a{font-size:.85rem;font-weight:600;color:var(--accent)}
@@ -526,8 +526,12 @@ body{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     <hr class="sep">
     <div class="lbl" id="kKontrakLbl">Kontrak berjalan</div>
     <div class="row2">
-      <div class="field"><label for="kTotal">Total bayar (Rp)</label><input id="kTotal" inputmode="numeric"></div>
+      <div class="field"><label for="kTotal">Nilai kontrak (Rp)</label><input id="kTotal" inputmode="numeric"></div>
       <div class="field"><label for="kTglBayar">Tanggal bayar</label><input id="kTglBayar" type="date"></div>
+    </div>
+    <div class="row2" id="kPayRow">
+      <div class="field"><label for="kJenis">Pembayaran</label><select id="kJenis"><option value="lunas">Lunas (bayar penuh)</option><option value="dp">DP (uang muka)</option></select></div>
+      <div class="field" id="kDpWrap" hidden><label for="kDp">Jumlah DP (Rp)</label><input id="kDp" inputmode="numeric"></div>
     </div>
     <div class="row2">
       <div class="field"><label for="kMulai">Mulai sewa</label><input id="kMulai" type="date"></div>
@@ -603,6 +607,7 @@ body{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
     <div class="read" id="aRead"></div>
     <div class="field" id="aCash" hidden><label for="aNama">Nama pembayar</label><input id="aNama" list="aNames" autocomplete="off" placeholder="Ketik nama, mis. Dewi"><datalist id="aNames"></datalist></div>
     <div class="field"><label for="aFor">Untuk</label><select id="aFor"></select></div>
+    <div class="field" id="aJenisWrap" hidden><label for="aJenis">Jenis pembayaran kontrakan</label><select id="aJenis"><option value="lunas">Lunas (bayar penuh)</option><option value="dp">DP (uang muka)</option></select></div>
     <div class="field" id="aNewWrap" hidden><label for="aNewName">Nama pengeluaran baru</label><input id="aNewName" placeholder="mis. Servis pompa air"></div>
     <div class="row2">
       <div class="field" id="aPerWrap"><label for="aPer">Sewa bulan</label><input id="aPer" type="month"></div>
@@ -754,6 +759,7 @@ function render(){
       const b=document.createElement("button");b.type="button";b.className="mini";b.textContent="Konfirmasi bayar";
       b.onclick=()=>openPay(t.id,view);act.append(b);
     }
+    if(p){const kw=document.createElement("button");kw.type="button";kw.className="linkbtn";kw.textContent="Kwitansi";kw.onclick=()=>kwitansiKos(t,p);act.append(kw)}
     if(p&&p.bukti){const v=document.createElement("button");v.type="button";v.className="linkbtn";v.textContent="Lihat bukti";
       v.onclick=()=>showProof(p.bukti,t.nama+" · "+mName(p.periode));act.append(v)}
     else if(p&&!readOnly&&!p.tunai){const v=document.createElement("button");v.type="button";v.className="linkbtn";v.textContent="Tambah bukti";
@@ -797,9 +803,10 @@ function renderSub(got,np,na){
   units.forEach(un=>(un.kontrak||[]).slice().sort((a,b)=>b.mulai.localeCompare(a.mulai)).forEach(c=>{
     n++;const li=document.createElement("li");const cur=curK(un)&&curK(un).id===c.id;
     li.innerHTML=`<div class="badge" style="font-size:.62rem">${c.mulai.slice(0,4)}</div>`+
-      `<div class="t-main"><div class="t-name">${esc(un.penyewa||"-")}</div><div class="t-meta num">${dShort(c.mulai)} – ${dShort(ymd(endOf(c)))} · ${rp(c.total)}${c.tglBayar?" · dibayar "+dShort(c.tglBayar):""}${c.tunai?" · tunai":""}</div></div>`+
+      `<div class="t-main"><div class="t-name">${esc(un.penyewa||"-")}</div><div class="t-meta num">${dShort(c.mulai)} – ${dShort(ymd(endOf(c)))} · ${rp(c.total)} · ${konSisa(c)>0?"dibayar "+rp(konPaid(c))+", sisa "+rp(konSisa(c)):"lunas"}</div></div>`+
       `<div class="t-act">${cur?'<span class="pill lunas">Berjalan</span>':'<span class="pill belum">Selesai</span>'}</div>`;
     const act=li.querySelector(".t-act");
+    if(konSisa(c)===0&&konPaid(c)>0){const kb=document.createElement("button");kb.type="button";kb.className="linkbtn";kb.textContent="Kwitansi";kb.onclick=()=>kwitansiKon(un,c);act.append(kb)}
     if(c.bukti){const b=document.createElement("button");b.type="button";b.className="linkbtn";b.textContent="Lihat bukti";b.onclick=()=>showProof(c.bukti,(un.penyewa||"")+" · "+dShort(c.mulai));act.append(b)}
     else if(cur&&!readOnly&&!c.tunai){const b=document.createElement("button");b.type="button";b.className="linkbtn";b.textContent="Unggah bukti";b.onclick=()=>openKon(un.id,"edit");act.append(b)}
     kh.append(li);
@@ -824,6 +831,14 @@ function renderSub(got,np,na){
     `<a class="btn ghost" target="_blank" rel="noopener" href="${g.toString()}">Pasang pengingat H-30 di Google Calendar</a>`;
   const ed=R.querySelector("[data-kon]");if(ed)ed.onclick=()=>konAction("edit");
   $("konMsgCopy").onclick=async()=>{try{await navigator.clipboard.writeText(msg);toast("Pesan disalin")}catch(e){const rg=document.createRange();rg.selectNodeContents($("konMsg"));const sl=getSelection();sl.removeAllRanges();sl.addRange(rg);toast("Teks dipilih, salin manual")}};
+}
+function openKonPay(uid){
+  openCash("transfer");
+  $("aFor").value="kon:"+uid;
+  const u=units.find(x=>x.id===uid),k=u&&curK(u);
+  if(k)$("aJml").value=Number(konSisa(k)).toLocaleString("id-ID");
+  $("aTitle").textContent="Pelunasan kontrakan";
+  aiPlan();
 }
 function konAction(kind){
   if(readOnly)return;
@@ -1089,6 +1104,7 @@ function renderHist(t){
     const late=p.tgl&&p.tgl>ymd(due(p.periode,t.tgl));
     li.innerHTML=`<span><b>${esc(mName(p.periode))}</b> · <span class="num">${rp(p.jumlah)}</span></span>`+
       `<span class="s">${p.tgl?"Dibayar "+dShort(p.tgl):"Tanggal bayar tidak dicatat"}${late?" · telat":""}${p.tunai?" · tunai":""}${p.ket?" · "+esc(p.ket):""}</span>`;
+    const kwb=document.createElement("button");kwb.type="button";kwb.className="linkbtn";kwb.style.gridColumn="1";kwb.style.justifySelf="start";kwb.textContent="Unduh kwitansi";kwb.onclick=()=>kwitansiKos(t,p);li.append(kwb);
     const pb=document.createElement("button");pb.type="button";pb.className="linkbtn";pb.style.gridColumn="1";pb.style.justifySelf="start";
     if(p.bukti){pb.textContent="Lihat bukti transfer";pb.onclick=()=>showProof(p.bukti,t.nama+" · "+mName(p.periode));li.append(pb)}
     else if(!readOnly&&!p.tunai){pb.textContent="Tambah bukti transfer";pb.onclick=()=>{$("dlgT").close();openPay(t.id,p.periode,p)};li.append(pb)}
@@ -1261,11 +1277,25 @@ let tt;function toast(m,label,fn,ms){const t=$("toast");t.textContent=m;
   t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,ms||2600)}
 
 /* ---------- beranda & kontrakan ---------- */
-function curK(u){return (u.kontrak||[]).slice().sort((a,b)=>b.mulai.localeCompare(a.mulai))[0]}
+function lastK(u){return (u.kontrak||[]).slice().sort((a,b)=>b.mulai.localeCompare(a.mulai))[0]}
+function curK(u){
+  const ks=(u.kontrak||[]).slice().sort((a,b)=>b.mulai.localeCompare(a.mulai));
+  // utamakan kontrak yang belum lunas, lalu yang sedang berjalan hari ini, lalu yang terbaru
+  const t=ymd(today0());
+  return ks.find(k=>konSisa(k)>0)||ks.find(k=>k.mulai<=t&&ymd(endOf(k))>t)||ks[0];
+}
 function endOf(k){const d=new Date(k.mulai+"T00:00");d.setMonth(d.getMonth()+Number(k.bulan||12));return d}
 const dLong=d=>d.toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"});
+function konPays(k){
+  if(Array.isArray(k.bayar))return k.bayar;
+  return k.tglBayar?[{id:"p0",tgl:k.tglBayar,jumlah:k.total,jenis:"lunas",bukti:k.bukti||null,tunai:!!k.tunai}]:[];
+}
+function konPaid(k){return konPays(k).reduce((a,x)=>a+(x.jumlah||0),0)}
+function konSisa(k){return Math.max(0,(k.total||0)-konPaid(k))}
 function konStatus(k){
   const end=endOf(k),days=Math.round((end-today0())/DAY);
+  const sisa=konSisa(k);
+  if(sisa>0&&days>=0)return {k:"segera",txt:(konPaid(k)?"DP · sisa ":"Belum bayar · ")+rpShort(sisa),days,end,sisa};
   if(days<0)return {k:"telat",txt:"Kontrak habis "+(-days)+" hari lalu",days,end};
   if(days<=60)return {k:"segera",txt:"Perpanjangan dalam "+days+" hari",days,end};
   return {k:"lunas",txt:"Aktif · lunas",days,end};
@@ -1309,17 +1339,22 @@ function renderKon(){
       `<dl class="ledger num" style="margin:0">`+
         `<dt>Total bayar (${Number(k.bulan)%12===0?Number(k.bulan)/12+" tahun":k.bulan+" bulan"})</dt><dd>${rp(k.total)}</dd>`+
         `<dt>Setara per bulan</dt><dd>${rp(perBulan)}</dd>`+
-        `<dt>Dibayar</dt><dd>${k.tglBayar?dShort(k.tglBayar):"-"}${k.bukti?" ✓ bukti":k.tunai?" · tunai":""}</dd>`+
+        `<dt>Sudah dibayar</dt><dd>${rp(konPaid(k))}</dd>`+
+        (konSisa(k)>0?`<dt class="neg">Sisa pelunasan</dt><dd class="neg">${rp(konSisa(k))}</dd>`:"")+
+        konPays(k).map(x=>`<dt style="font-size:.8rem">· ${x.jenis==="dp"?"DP":"Pelunasan"} ${x.tgl?dShort(x.tgl):""}</dt><dd style="font-size:.8rem;font-weight:600">${rp(x.jumlah)}${x.bukti?" ✓":x.tunai?" tunai":""}</dd>`).join("")+
         `<dt>Maintenance &amp; WiFi</dt><dd>Tidak ada</dd>`+
       `</dl>`+
       (k.ket?`<p class="hint" style="margin:0">${esc(k.ket)}</p>`:"")+
-      `<div class="row-btns"><button class="btn primary" type="button" data-renew>Catat perpanjangan</button><button class="btn ghost" type="button" data-edit>Ubah data</button></div>`+
+      `<div class="row-btns">${konSisa(k)>0?`<button class="btn primary" type="button" data-lunasi>Catat pelunasan</button>`:`<button class="btn primary" type="button" data-renew>Catat perpanjangan</button>`}<button class="btn ghost" type="button" data-edit>Ubah data</button></div>`+
       `<div class="links" data-links></div>`+
       (hist.length>1?`<div><div class="lbl" style="margin-bottom:4px">Riwayat kontrak</div><ul class="hist">${hist.map(h=>`<li><span><b>${dShort(h.mulai)} – ${dShort(ymd(endOf(h)))}</b></span><span class="s num">${rp(h.total)}${h.tglBayar?" · dibayar "+dShort(h.tglBayar):""}</span></li>`).join("")}</ul></div>`:"");
-    el.querySelector("[data-renew]").onclick=()=>openKon(u.id,"renew");
+    const rb=el.querySelector("[data-renew]");if(rb)rb.onclick=()=>openKon(u.id,"renew");
+    const lb=el.querySelector("[data-lunasi]");if(lb)lb.onclick=()=>openKonPay(u.id);
     el.querySelector("[data-edit]").onclick=()=>openKon(u.id,"edit");
     if(readOnly){el.querySelector(".row-btns").hidden=true}
     const L=el.querySelector("[data-links]");
+    if(konSisa(k)===0&&konPaid(k)>0){const kw=document.createElement("button");kw.type="button";kw.className="linkbtn";kw.style.fontSize=".85rem";kw.textContent="Unduh kwitansi";
+      kw.onclick=()=>kwitansiKon(u,k);L.append(kw)}
     if(k.bukti){const pb=document.createElement("button");pb.type="button";pb.className="linkbtn";pb.style.fontSize=".85rem";pb.textContent="Lihat bukti transfer";
       pb.onclick=()=>showProof(k.bukti,(u.penyewa||"Kontrakan")+" · "+dShort(k.mulai));L.append(pb)}
     else if(!readOnly&&!k.tunai){const pb=document.createElement("button");pb.type="button";pb.className="linkbtn";pb.style.fontSize=".85rem";pb.textContent="Unggah bukti transfer";
@@ -1344,7 +1379,7 @@ function openKon(id,m){
   const u=units.find(x=>x.id===id)||{nama:"Kontrakan",penyewa:"",hp:"",kontrak:[]};
   const k=curK(u);
   let c;
-  if(konMode==="renew"&&k){const e=endOf(k);c={mulai:ymd(e),bulan:k.bulan,total:k.total,tglBayar:ymd(new Date()),ket:""}}
+  if(konMode==="renew"&&k){const lk=lastK(u);const e=endOf(lk);c={mulai:ymd(e),bulan:lk.bulan,total:lk.total,tglBayar:ymd(new Date()),ket:""}}
   else c=k||{mulai:ymd(new Date()),bulan:12,total:"",tglBayar:ymd(new Date()),ket:""};
   $("kTitle").textContent=konMode==="renew"?"Catat perpanjangan":konMode==="new"?"Kontrakan baru":"Ubah kontrakan";
   $("kKontrakLbl").textContent=konMode==="renew"?"Kontrak baru":"Kontrak berjalan";
@@ -1352,6 +1387,7 @@ function openKon(id,m){
   $("kTotal").value=c.total?Number(c.total).toLocaleString("id-ID"):"";$("kTglBayar").value=c.tglBayar||"";
   $("kMulai").value=c.mulai;$("kBulan").value=String(c.bulan||12);$("kKet").value=c.ket||"";
   $("kErr").hidden=true;$("kDel").hidden=konMode!=="edit";
+  $("kPayRow").hidden=konMode==="edit";$("kJenis").value="lunas";$("kDpWrap").hidden=true;$("kDp").value="";
   setupProof("k");
   if(konMode==="edit"&&k&&k.bukti)$("kFileNote").textContent="Bukti sudah ada. Pilih file baru untuk menggantinya.";
   $("kSubmit").textContent=konMode==="edit"?"Simpan":"Konfirmasi lunas";
@@ -1372,10 +1408,18 @@ $("formK").addEventListener("submit",async e=>{
   const u={id:old?old.id:("k"+Date.now().toString(36)),nama:$("kNama").value.trim()||"Kontrakan",penyewa:$("kPenyewa").value.trim(),hp:$("kHp").value.trim(),kontrak:old?(old.kontrak||[]).slice():[]};
   const c={mulai,bulan:Number($("kBulan").value),total,tglBayar:$("kTglBayar").value||null,ket:$("kKet").value.trim()};
   if(up)c.bukti=up;c.tunai=tunai;
-  if(konMode==="edit"&&curK(u)){const cur=curK(u);const i=u.kontrak.findIndex(x=>x.id===cur.id);u.kontrak[i]={...cur,...c}}
-  else u.kontrak.push({id:"c"+Date.now().toString(36),...c});
+  if(konMode==="edit"&&curK(u)){const cur=curK(u);const i=u.kontrak.findIndex(x=>x.id===cur.id);
+    const nk={...cur,...c};
+    if(Array.isArray(cur.bayar)&&cur.bayar.length&&up){nk.bayar=cur.bayar.map((x,j)=>j===cur.bayar.length-1?{...x,bukti:up}:x)}
+    u.kontrak[i]=nk}
+  else{
+    const jenis=$("kJenis").value,dp=digits($("kDp").value);
+    if(jenis==="dp"&&(!dp||dp>=total)){$("kErr").textContent="Isi jumlah DP yang lebih kecil dari nilai kontrak.";$("kErr").hidden=false;return}
+    const pay={id:"p"+Date.now().toString(36),tgl:c.tglBayar,jumlah:jenis==="dp"?dp:total,jenis,tunai};if(up)pay.bukti=up;
+    u.kontrak.push({id:"c"+Date.now().toString(36),...c,bayar:[pay]});
+  }
   $("dlgK").close();
-  if(await saveUnit(u))toast(konMode==="renew"?"Perpanjangan dicatat":"Data kontrakan disimpan");
+  if(await saveUnit(u)){const nk=curK(u);toast(konMode==="edit"?"Data kontrakan disimpan":(nk&&konSisa(nk)>0?"DP dicatat · sisa "+rp(konSisa(nk)):"Kontrak lunas dicatat"))}
 });
 $("kDel").onclick=async()=>{
   const b=$("kDel");
@@ -1384,6 +1428,8 @@ $("kDel").onclick=async()=>{
   if(await delUnit(konEdit))toast("Kontrakan dihapus");
 };
 $("btnKonAdd").onclick=()=>openKon(null,"new");
+$("kJenis").addEventListener("change",()=>{$("kDpWrap").hidden=$("kJenis").value!=="dp";$("kSubmit").textContent=$("kJenis").value==="dp"?"Konfirmasi DP":"Konfirmasi lunas"});
+fmtRp($("kDp"));
 
 
 /* ---------- AI: baca bukti transfer ---------- */
@@ -1538,6 +1584,7 @@ function aiPlan(setPer){
   const v=$("aFor").value,jml=digits($("aJml").value),tgl=$("aTgl").value||ymd(new Date());
   $("aPerWrap").hidden=!v.startsWith("kos:");
   $("aNewWrap").hidden=v!=="out:__new";
+  $("aJenisWrap").hidden=true;
   if(!v){$("aPlan").textContent="Pilih penyewa atau pengeluaran untuk melanjutkan.";return null}
   if(v.startsWith("out:")){
     const per=ym(new Date(tgl+"T00:00"));
@@ -1577,17 +1624,31 @@ function aiPlan(setPer){
   }
   const u=units.find(x=>x.id===v.slice(4));if(!u)return null;
   const k=curK(u);
+  if(k&&konSisa(k)>0){
+    const sisa=konSisa(k);const lunas=jml>=sisa;
+    $("aPlan").textContent=`${lunas?"Pelunasan":"Cicilan"} kontrak ${u.penyewa} (${dShort(k.mulai)} – ${dShort(ymd(endOf(k)))}) sebesar ${rp(jml)}. `+(lunas?"Kontrak menjadi LUNAS.":`Sisa ${rp(sisa-jml)}.`);
+    return {kind:"kon",u,k,pay:true,jenis:lunas?"lunas":"dp",jml,tgl,auto:jml>0&&jml<=sisa};
+  }
   let attach=false;
   if(k&&!k.bukti){const d=Math.abs((new Date(tgl+"T00:00")-new Date((k.tglBayar||k.mulai)+"T00:00"))/DAY);attach=d<=45}
+  let jenis="lunas";
+  if(!attach){
+    $("aJenisWrap").hidden=false;
+    if(!aiCtx||!aiCtx.jenisTouched)$("aJenis").value=k&&jml&&jml<k.total?"dp":"lunas";
+    jenis=$("aJenis").value;
+  }
+  const nilai=k?k.total:jml;
   const txt=attach?`Bukti akan dilampirkan ke kontrak ${u.penyewa} yang berjalan (${dShort(k.mulai)} – ${dShort(ymd(endOf(k)))}).`
-    :k?`Akan dicatat sebagai perpanjangan kontrak ${u.penyewa} mulai ${dShort(ymd(endOf(k)))} sebesar ${rp(jml)}.`
-    :`Akan dicatat sebagai kontrak baru ${u.penyewa}.`;
+    :k?(jenis==="dp"?`DP perpanjangan kontrak ${u.penyewa} mulai ${dShort(ymd(endOf(lastK(u))))}: ${rp(jml)} dari nilai ${rp(nilai)}, sisa ${rp(Math.max(0,nilai-jml))}.`
+        :`Perpanjangan kontrak ${u.penyewa} mulai ${dShort(ymd(endOf(lastK(u))))} LUNAS sebesar ${rp(jml)}.`)
+    :`Akan dicatat sebagai kontrak baru ${u.penyewa} (${jenis==="dp"?"DP":"lunas"}).`;
   $("aPlan").textContent=txt;
-  return {kind:"kon",u,k,attach,jml,tgl,auto:attach?jml===k.total:(k&&jml===k.total)};
+  return {kind:"kon",u,k,attach,jenis,nilai,jml,tgl,auto:attach?jml===k.total:(k&&(jml===k.total||(jenis==="dp"&&jml<k.total)))};
 }
 ["aFor","aJml","aTgl"].forEach(id=>$(id).addEventListener(id==="aFor"?"change":"input",()=>aiPlan(id==="aFor")));
 $("aPer").addEventListener("change",()=>aiPlan());
 $("aNewName").addEventListener("input",()=>aiPlan());
+$("aJenis").addEventListener("change",()=>{if(aiCtx)aiCtx.jenisTouched=true;aiPlan()});
 fmtRp($("aJml"));
 $("formA").addEventListener("submit",async e=>{
   e.preventDefault();
@@ -1644,10 +1705,19 @@ async function aiApply(pl,auto){
   }
   const u=pl.u,prevU=JSON.parse(JSON.stringify(u));
   const nu={...u,kontrak:(u.kontrak||[]).map(x=>({...x}))};
-  if(pl.attach){const i=nu.kontrak.findIndex(x=>x.id===pl.k.id);nu.kontrak[i]={...nu.kontrak[i],tglBayar:pl.tgl,tunai:cash};if(bukti)nu.kontrak[i].bukti=bukti;if(cash)nu.kontrak[i].ket=ket}
-  else{const c={id:"c"+Date.now().toString(36),mulai:pl.k?ymd(endOf(pl.k)):pl.tgl,bulan:pl.k?pl.k.bulan:12,total:pl.jml,tglBayar:pl.tgl,ket,tunai:cash};if(bukti)c.bukti=bukti;nu.kontrak.push(c)}
+  const pay={id:"p"+Date.now().toString(36),tgl:pl.tgl,jumlah:pl.jml,jenis:pl.jenis||"lunas",tunai:cash,ket};if(bukti)pay.bukti=bukti;
+  let msg;
+  if(pl.pay){
+    const i=nu.kontrak.findIndex(x=>x.id===pl.k.id);const cur=nu.kontrak[i];
+    const list=konPays(cur).map(x=>({...x}));list.push(pay);
+    nu.kontrak[i]={...cur,bayar:list,tglBayar:pl.tgl};if(bukti)nu.kontrak[i].bukti=bukti;
+    const sisa=konSisa(nu.kontrak[i]);msg=sisa>0?"cicilan dicatat · sisa "+rp(sisa):"kontrak "+u.penyewa+" LUNAS";
+  }else if(pl.attach){const i=nu.kontrak.findIndex(x=>x.id===pl.k.id);nu.kontrak[i]={...nu.kontrak[i],tglBayar:pl.tgl,tunai:cash};if(bukti)nu.kontrak[i].bukti=bukti;if(cash)nu.kontrak[i].ket=ket;msg="bukti dilampirkan ke kontrak "+u.penyewa}
+  else{const total=pl.jenis==="dp"?(pl.nilai||pl.jml):pl.jml;const lk=lastK(u);
+    const c={id:"c"+Date.now().toString(36),mulai:lk?ymd(endOf(lk)):pl.tgl,bulan:pl.k?pl.k.bulan:12,total,tglBayar:pl.tgl,ket,tunai:cash,bayar:[pay]};if(bukti)c.bukti=bukti;nu.kontrak.push(c);
+    msg=pl.jenis==="dp"?"DP perpanjangan "+u.penyewa+" dicatat · sisa "+rp(Math.max(0,total-pl.jml)):"perpanjangan "+u.penyewa+" lunas"}
   if(await saveUnit(nu)){
-    toast((auto?"Otomatis: ":"")+(pl.attach?"bukti dilampirkan ke kontrak ":"perpanjangan dicatat untuk ")+u.penyewa,"Batalkan",()=>{saveUnit(prevU);toast("Dibatalkan")},7000);
+    toast((auto?"Otomatis: ":"")+msg,"Batalkan",()=>{saveUnit(prevU);toast("Dibatalkan")},7000);
   }
 }
 
@@ -1701,8 +1771,8 @@ async function buildPdf(per,withFoto){
   const dep=deposits.find(d=>d.periode===per);
   const sn=saldoNow();
   // kontrakan
-  const konPaid=[];units.forEach(u=>(u.kontrak||[]).forEach(k=>{if((k.tglBayar||"").slice(0,7)===per)konPaid.push({u,k})}));
-  const konIn=konPaid.reduce((n,x)=>n+(x.k.total||0),0);
+  const konPaidL=[];units.forEach(u=>(u.kontrak||[]).forEach(k=>konPays(k).forEach(x=>{if((x.tgl||"").slice(0,7)===per)konPaidL.push({u,k,x})})));
+  const konIn=konPaidL.reduce((n,o)=>n+(o.x.jumlah||0),0);
 
   let y=heading("Ringkasan",42);
   y=table({startY:y,head:[["Keterangan","Jumlah"]],columnStyles:{1:{halign:"right",cellWidth:60}},
@@ -1736,8 +1806,8 @@ async function buildPdf(per,withFoto){
   if(y>235){doc.addPage();y=M+4}
   y=heading("Kontrakan",y);
   const krows=units.map(u=>{const k=curK(u);if(!k)return [u.penyewa||"-","-","-","-","-"];const st=konStatus(k);
-    return [u.penyewa||"-",pt(dShort(k.mulai))+" - "+pt(dShort(ymd(st.end))),pt(rp(k.total)),k.tglBayar?pt(dShort(k.tglBayar))+(k.tunai?" (tunai)":""):"-",st.days>=0?st.days+" hari lagi":"Habis"]});
-  y=table({startY:y,head:[["Penyewa","Masa kontrak","Nilai kontrak","Dibayar","Sisa"]],columnStyles:{2:{halign:"right"}},
+    return [u.penyewa||"-",pt(dShort(k.mulai))+" - "+pt(dShort(ymd(st.end))),pt(rp(k.total)),pt(rp(konPaid(k)))+(konSisa(k)>0?" (sisa "+pt(rp(konSisa(k)))+")":" (lunas)"),st.days>=0?st.days+" hari lagi":"Habis"]});
+  y=table({startY:y,head:[["Penyewa","Masa kontrak","Nilai kontrak","Dibayar","Sisa waktu"]],columnStyles:{2:{halign:"right"}},
     body:krows.length?krows:[[{content:"Tidak ada kontrakan",colSpan:5}]]})+6;
   doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...MUTED);
   doc.text("Kontrakan tidak dikenakan biaya maintenance maupun WiFi.",M,y);
@@ -1746,7 +1816,7 @@ async function buildPdf(per,withFoto){
   if(withFoto){
     const proofs=[];
     act.forEach(t=>{const p=payOf(t.id,per);if(p&&p.bukti)proofs.push({title:(t.kamar?t.kamar+" - ":"")+t.nama+" - "+pt(mName(per)),sub:(p.tunai?"Tunai":"Transfer")+" "+pt(rp(p.jumlah))+(p.tgl?" - "+pt(dShort(p.tgl)):""),b:p.bukti})});
-    konPaid.forEach(({u,k})=>{if(k.bukti)proofs.push({title:"Kontrakan - "+(u.penyewa||""),sub:pt(rp(k.total))+(k.tglBayar?" - "+pt(dShort(k.tglBayar)):""),b:k.bukti})});
+    konPaidL.forEach(({u,x})=>{if(x.bukti)proofs.push({title:"Kontrakan - "+(u.penyewa||"")+(x.jenis==="dp"?" (DP)":""),sub:pt(rp(x.jumlah))+(x.tgl?" - "+pt(dShort(x.tgl)):""),b:x.bukti})});
     let skipped=0;
     for(const pr of proofs){
       const im=await imgData(pr.b);if(!im){skipped++;continue}
@@ -1845,6 +1915,71 @@ $("formAI").addEventListener("submit",async e=>{
   }finally{b.disabled=false;b.textContent="Simpan & uji"}
 });
 $("aiDel").onclick=()=>{try{localStorage.removeItem(AI_KEY)}catch(e){}setupKeyAi();$("dlgAI").close();toast("API key dihapus")};
+
+
+/* ---------- kwitansi ---------- */
+const PENERIMA="Muhammad Farhan";
+const SIGNATURE="data:image/png;base64,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";
+function terbilang(n){
+  n=Math.floor(Math.abs(n||0));
+  const s=["","satu","dua","tiga","empat","lima","enam","tujuh","delapan","sembilan","sepuluh","sebelas"];
+  const f=x=>x<12?s[x]:x<20?f(x-10)+" belas":x<100?f(Math.floor(x/10))+" puluh"+(x%10?" "+f(x%10):""):
+    x<200?"seratus"+(x-100?" "+f(x-100):""):x<1000?f(Math.floor(x/100))+" ratus"+(x%100?" "+f(x%100):""):
+    x<2000?"seribu"+(x-1000?" "+f(x-1000):""):x<1e6?f(Math.floor(x/1000))+" ribu"+(x%1000?" "+f(x%1000):""):
+    x<1e9?f(Math.floor(x/1e6))+" juta"+(x%1e6?" "+f(x%1e6):""):f(Math.floor(x/1e9))+" miliar"+(x%1e9?" "+f(x%1e9):"");
+  const t=n===0?"nol":f(n).replace(/\s+/g," ").trim();
+  return t.charAt(0).toUpperCase()+t.slice(1)+" rupiah";
+}
+async function buildKwitansi(o){
+  const JsPDF=await pdfLib();
+  const doc=new JsPDF({unit:"mm",format:"a5",orientation:"landscape"});
+  const W=210,H=148,M=12,INK=[20,48,42],MUTED=[93,113,107],G=[11,74,61];
+  doc.setDrawColor(...G);doc.setLineWidth(0.8);doc.rect(6,6,W-12,H-12);
+  doc.setFillColor(...G);doc.rect(6,6,W-12,24,"F");
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(20);doc.text("KWITANSI",M+2,22);
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.text("Kost Goldyz & Kontrakan",M+2,27);
+  doc.setFontSize(9.5);doc.text("No. "+o.no,W-M-2,16,{align:"right"});doc.text(pt(dLong(new Date(o.tgl+"T00:00"))),W-M-2,22,{align:"right"});
+  let y=44;const row=(label,val,bold)=>{doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...MUTED);doc.text(label,M+2,y);
+    doc.setTextColor(...INK);doc.setFont("helvetica",bold?"bold":"normal");doc.setFontSize(bold?12:11);
+    const lines=doc.splitTextToSize(pt(val),W-M*2-48);doc.text(lines,M+46,y);
+    doc.setDrawColor(207,218,212);doc.setLineWidth(0.2);doc.line(M+46,y+1.8+(lines.length-1)*5,W-M-2,y+1.8+(lines.length-1)*5);y+=9+(lines.length-1)*5};
+  row("Telah terima dari",o.dari,true);
+  row("Uang sejumlah",terbilang(o.jumlah));
+  row("Untuk pembayaran",o.untuk);
+  row("Cara pembayaran",o.cara);
+  // nominal
+  doc.setFillColor(234,240,236);doc.setDrawColor(...G);doc.setLineWidth(0.6);doc.roundedRect(M+2,H-40,74,16,2,2,"FD");
+  doc.setTextColor(...INK);doc.setFont("helvetica","bold");doc.setFontSize(15);doc.text(pt(rp(o.jumlah)),M+6,H-29.5);
+  // cap lunas
+  doc.setTextColor(29,122,78);doc.setDrawColor(29,122,78);doc.setLineWidth(0.9);
+  doc.setFont("helvetica","bold");doc.setFontSize(22);doc.text("LUNAS",M+96,H-26,{angle:12});
+  // tanda tangan
+  doc.setTextColor(...INK);doc.setFont("helvetica","normal");doc.setFontSize(10);
+  doc.text("Penerima,",W-M-30,H-46,{align:"center"});
+  try{doc.addImage(SIGNATURE,"PNG",W-M-30-22,H-40,44,17.7)}catch(e){}
+  doc.setDrawColor(...MUTED);doc.setLineWidth(0.3);doc.line(W-M-56,H-21,W-M-4,H-21);
+  doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text(PENERIMA,W-M-30,H-16,{align:"center"});
+  doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...MUTED);doc.text("Pengelola Kost Goldyz",W-M-30,H-12,{align:"center"});
+  return doc.output("blob");
+}
+async function kwitansi(o,file){
+  try{toast("Menyiapkan kwitansi…");const b=await buildKwitansi(o);await savePdfBlob(b,file);toast("Kwitansi siap")}
+  catch(e){toast(e&&e.code==="declined"?"Unduhan dibatalkan":"Kwitansi gagal dibuat. Periksa koneksi internet.")}
+}
+const fileSafe=s=>String(s||"").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"");
+function kwitansiKos(t,p){
+  kwitansi({no:"KG-"+p.periode.replace("-","")+"-"+(t.kamar||"X"),dari:t.nama,jumlah:p.jumlah,tgl:p.tgl||ymd(new Date()),
+    untuk:"Sewa kamar "+(t.kamar||"")+" Kost Goldyz bulan "+mName(p.periode),
+    cara:p.tunai?"Tunai":"Transfer"+(p.ket&&/transfer/i.test(p.ket)?" ("+p.ket.replace(/^Transfer\s*/i,"")+")":"")},
+    "Kwitansi-"+fileSafe(t.nama)+"-"+p.periode+".pdf");
+}
+function kwitansiKon(u,k){
+  const ps=konPays(k);const last=ps[ps.length-1]||{};
+  kwitansi({no:"KG-"+k.mulai.slice(0,7).replace("-","")+"-KTR",dari:u.penyewa||"-",jumlah:konPaid(k),tgl:last.tgl||k.tglBayar||ymd(new Date()),
+    untuk:"Sewa "+(u.nama||"kontrakan")+" periode "+dLong(new Date(k.mulai+"T00:00"))+" s/d "+dLong(endOf(k))+(ps.length>1?" ("+ps.map(x=>(x.jenis==="dp"?"DP ":"pelunasan ")+rp(x.jumlah)).join(" + ")+")":""),
+    cara:ps.every(x=>x.tunai)?"Tunai":ps.some(x=>x.tunai)?"Transfer & tunai":"Transfer"},
+    "Kwitansi-Kontrakan-"+fileSafe(u.penyewa)+"-"+k.mulai.slice(0,7)+".pdf");
+}
 
 /* ---------- navigasi ---------- */
 const KOS_SUB={tagihan:"Tagihan Bulanan",denah:"Denah Kamar",penghuni:"Data Penghuni",maintenance:"Maintenance",rekap:"Rekap WA"};

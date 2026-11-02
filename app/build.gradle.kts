@@ -11,8 +11,8 @@ android {
         applicationId = "id.kostgoldyz.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.4"
+        versionCode = 8
+        versionName = "1.6"
     }
 
     // Kunci tanda tangan tetap, supaya APK baru bisa dipasang menimpa yang lama.
