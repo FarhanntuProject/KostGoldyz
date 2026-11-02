@@ -633,7 +633,7 @@ let tenants=[], pays=[];
 let db=null, mode="loading", readOnly=false;
 let view=ym(new Date());
 let editId=null, payFor=null;
-let items=[], spends=[], budget=900000, saldo=null, saldoTgl=null, deposits=[];
+let items=[], spends=[], budget=900000, saldo=null, saldoTgl=null, saldoIncl=null, deposits=[];
 let itemId=null, spendFor=null;
 let units=[], konEdit=null, konMode="edit";
 let assets=null, payEdit=null, ai=null, aiCtx=null, undoFn=null;
@@ -653,10 +653,13 @@ function nextOf(it){
   let d=addDays(new Date(it.terakhir+"T00:00"),f.step);const t=today0();
   while(d<t)d=addDays(d,f.step);return d;
 }
+// Pengeluaran/setoran yang sudah termasuk di saldo awal (default: WiFi 2 Nov yang dibayar sebelum saldo dicatat).
+const inclList=()=>Array.isArray(saldoIncl)?saldoIncl:["wifi_2026-11_a"];
+const afterSaldo=x=>!!(x.tgl&&saldoTgl&&x.tgl>=saldoTgl&&!inclList().includes(x.id));
 function saldoNow(){
   if(saldo==null)return null;let v=saldo;
-  deposits.forEach(d=>{if(d.tgl&&d.tgl>saldoTgl)v+=d.jumlah||0});
-  spends.forEach(x=>{if(x.tgl&&x.tgl>saldoTgl)v-=x.jumlah||0});
+  deposits.forEach(d=>{if(afterSaldo(d))v+=d.jumlah||0});
+  spends.forEach(x=>{if(afterSaldo(x))v-=x.jumlah||0});
   return Math.round(v*100)/100;
 }
 function sessionsOf(it,jml){if(!it||!it.nominal||!jml||jml%it.nominal)return 0;const k=jml/it.nominal;return k>=1&&k<=8?k:0}
@@ -841,7 +844,7 @@ function renderMaint(got){
   let html="";
   html+=`<div class="fund"><span class="lbl">Saldo dana maintenance</span>`+
     (now==null?`<b>—</b><span class="hint">Isi saldo lewat "Atur dana &amp; saldo".</span>`
-      :`<b class="num ${now<0?"neg":""}">${rp2(now)}</b><span class="hint">Saldo ${rp2(saldo)} per ${dShort(saldoTgl)}, ditambah setoran dan dikurangi pengeluaran sesudahnya.</span>`)+`</div>`;
+      :`<b class="num ${now<0?"neg":""}">${rp2(now)}</b><span class="hint">Saldo awal ${rp2(saldo)} per ${dShort(saldoTgl)}, ditambah setoran dan dikurangi pengeluaran yang dicatat sejak itu.</span>`)+`</div>`;
   html+=`<div class="dep"><span>Setoran ${esc(mName(view))}: `+
     (dep?`<b class="num">${rp(dep.jumlah)}</b> <span class="pill lunas">Disetor ${dep.tgl?dShort(dep.tgl):""}</span>`:`<b class="num">${rp(budget)}</b> <span class="pill belum">Belum dicatat</span>`)+
     `</span>${readOnly?"":`<button class="mini ${dep?"":"solid"}" type="button" id="btnDep">${dep?"Ubah":"Catat setoran"}</button>`}</div>`;
@@ -963,7 +966,6 @@ $("formS").addEventListener("submit",async e=>{
   if(kali>1)rec.kali=kali;
   if(bukti)rec.bukti=bukti;
   if(await saveSpend(rec)){
-    if(kali===1&&tgl&&(FREQ[it.frek]||{}).step&&(!it.terakhir||tgl>it.terakhir))await saveItem({...it,terakhir:tgl});
     toast((kali>1?kali+"× ":"")+it.nama+" dicatat");
   }
 });
@@ -978,11 +980,13 @@ $("formB").addEventListener("submit",async e=>{
   const n=digits($("bNom").value),sv=parseRp($("bSaldo").value),st=$("bSaldoTgl").value;
   if($("bSaldo").value.trim()&&(isNaN(sv)||!st)){$("bErr").textContent="Isi saldo dan tanggalnya.";$("bErr").hidden=false;return}
   $("dlgB").close();
-  if(await saveFund({anggaran:n,saldo:$("bSaldo").value.trim()?sv:null,saldoTgl:$("bSaldo").value.trim()?st:null}))toast("Dana maintenance disimpan")});
+  const has=$("bSaldo").value.trim();
+  const incl=has?spends.filter(x=>x.tgl&&x.tgl<=st).map(x=>x.id).concat(deposits.filter(x=>x.tgl&&x.tgl<=st).map(x=>x.id)):[];
+  if(await saveFund({anggaran:n,saldo:has?sv:null,saldoTgl:has?st:null,saldoIncl:incl}))toast("Dana maintenance disimpan")});
 
 /* ---------- penyimpanan ---------- */
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({tenants,pays,items,spends,budget,saldo,saldoTgl,deposits,units}))}catch(e){}}
-function loadLocal(){try{let v=JSON.parse(localStorage.getItem(LS)||"null");if(!v&&window.KOS_SEED){v=JSON.parse(JSON.stringify(window.KOS_SEED))}if(v){tenants=v.tenants||[];pays=v.pays||[];items=v.items||[];spends=v.spends||[];if(typeof v.budget==="number")budget=v.budget;saldo=v.saldo??null;saldoTgl=v.saldoTgl||null;deposits=v.deposits||[];units=v.units||[]}}catch(e){}}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({tenants,pays,items,spends,budget,saldo,saldoTgl,saldoIncl,deposits,units}))}catch(e){}}
+function loadLocal(){try{let v=JSON.parse(localStorage.getItem(LS)||"null");if(!v&&window.KOS_SEED){v=JSON.parse(JSON.stringify(window.KOS_SEED))}if(v){tenants=v.tenants||[];pays=v.pays||[];items=v.items||[];spends=v.spends||[];if(typeof v.budget==="number")budget=v.budget;saldo=v.saldo??null;saldoTgl=v.saldoTgl||null;saldoIncl=Array.isArray(v.saldoIncl)?v.saldoIncl:null;deposits=v.deposits||[];units=v.units||[]}}catch(e){}}
 
 async function write(fn,localFn){
   if(mode==="db"){
@@ -1004,7 +1008,7 @@ const saveItem=it=>{const {id,...body}=it;return write(()=>db.collection("biaya"
 const delItem=id=>write(()=>db.collection("biaya").doc(id).delete(),()=>{items=items.filter(x=>x.id!==id)});
 const saveSpend=s=>{const {id,...body}=s;return write(()=>db.collection("pengeluaran").doc(id).set(body),()=>upsert(spends,s))};
 const delSpend=id=>write(()=>db.collection("pengeluaran").doc(id).delete(),()=>{spends=spends.filter(x=>x.id!==id)});
-const saveFund=o=>write(()=>db.collection("pengaturan").doc("maintenance").set(o),()=>{budget=o.anggaran;saldo=o.saldo;saldoTgl=o.saldoTgl});
+const saveFund=o=>write(()=>db.collection("pengaturan").doc("maintenance").set(o),()=>{budget=o.anggaran;saldo=o.saldo;saldoTgl=o.saldoTgl;saldoIncl=o.saldoIncl});
 const saveDep=d=>{const {id,...body}=d;return write(()=>db.collection("setoran").doc(id).set(body),()=>upsert(deposits,d))};
 const saveUnit=u=>{const {id,...body}=u;return write(()=>db.collection("kontrakan").doc(id).set(body),()=>upsert(units,u))};
 const delUnit=id=>write(()=>db.collection("kontrakan").doc(id).delete(),()=>{units=units.filter(x=>x.id!==id)});
@@ -1039,7 +1043,7 @@ async function init(){
   },fail);
   db.collection("biaya").onSnapshot(s=>{items=s.docs.map(d=>({id:d.id,...d.data()}));render()},()=>{});
   db.collection("pengeluaran").onSnapshot(s=>{spends=s.docs.map(d=>({id:d.id,...d.data()}));render()},()=>{});
-  db.doc("pengaturan/maintenance").onSnapshot(s=>{if(s.exists){const v=s.data();if(typeof v.anggaran==="number")budget=v.anggaran;saldo=typeof v.saldo==="number"?v.saldo:null;saldoTgl=v.saldoTgl||null;render()}},()=>{});
+  db.doc("pengaturan/maintenance").onSnapshot(s=>{if(s.exists){const v=s.data();if(typeof v.anggaran==="number")budget=v.anggaran;saldo=typeof v.saldo==="number"?v.saldo:null;saldoTgl=v.saldoTgl||null;saldoIncl=Array.isArray(v.saldoIncl)?v.saldoIncl:null;render()}},()=>{});
   db.collection("kontrakan").onSnapshot(s=>{units=s.docs.map(d=>({id:d.id,...d.data()}));render()},()=>{});
   db.collection("setoran").onSnapshot(s=>{deposits=s.docs.map(d=>({id:d.id,...d.data()}));render()},()=>{});
 }
@@ -1537,7 +1541,7 @@ function aiPlan(setPer){
   if(!v){$("aPlan").textContent="Pilih penyewa atau pengeluaran untuk melanjutkan.";return null}
   if(v.startsWith("out:")){
     const per=ym(new Date(tgl+"T00:00"));
-    const sn=saldoNow();const after=sn!=null&&saldoTgl&&tgl>saldoTgl?sn-jml:sn;
+    const sn=saldoNow();const after=sn!=null&&saldoTgl&&tgl>=saldoTgl?sn-jml:sn;
     const sTxt=sn!=null?` Saldo dana maintenance menjadi ${rp2(after)}.`:"";
     if(v==="out:__new"){
       const nm=$("aNewName").value.trim();
@@ -1555,7 +1559,6 @@ function aiPlan(setPer){
     }else{
       txt=`Pengeluaran ${it.nama} sebesar ${rp(jml)} (${dShort(tgl)}) akan dicatat dari dana maintenance.`+sTxt;
       if(jml&&!kali)txt+=` Nominal berbeda dari biasanya (${rp(it.nominal)} per kali).`;
-      if((FREQ[it.frek]||{}).step)txt+=` Jadwal ${it.nama.toLowerCase()} berikutnya dihitung dari tanggal ini.`;
     }
     $("aPlan").textContent=txt;
     return {kind:"out",it,per,jml,tgl,kali:kali||1,auto:!dup&&kali>=1,blocked:dup,blockedMsg:"Pengeluaran ini sudah tercatat."};
@@ -1623,7 +1626,7 @@ async function aiApply(pl,auto){
     if(bukti)rec.bukti=bukti;
     if(await saveSpend(rec)){
       let moved=false;
-      if(kali===1&&(FREQ[it.frek]||{}).step&&(!it.terakhir||pl.tgl>it.terakhir)){await saveItem({...it,terakhir:pl.tgl});moved=true}
+
       const undo=async()=>{await delSpend(rec.id);if(created)await delItem(created.id);else if(moved)await saveItem(prevIt);toast("Dibatalkan")};
       toast((auto?"Otomatis: ":"")+(kali>1?kali+"× ":"")+it.nama+" "+rp(pl.jml)+" dicatat","Batalkan",undo,7000);
     }
