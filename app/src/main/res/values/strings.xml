@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kost Goldyz</string>
-    <!-- Alamat aplikasi Kost Goldyz di Claude. Ganti di sini kalau link-nya berubah. -->
-    <string name="app_url">https://claude.ai/artifact/FsZHWp4sN1Hkf72y7Zsazs</string>
 </resources>
