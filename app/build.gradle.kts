@@ -11,12 +11,26 @@ android {
         applicationId = "id.kostgoldyz.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 4
+        versionName = "2.0"
+    }
+
+    // Kunci tanda tangan tetap, supaya APK baru bisa dipasang menimpa yang lama.
+    signingConfigs {
+        create("kost") {
+            storeFile = file("kostgoldyz.jks")
+            storePassword = "kostgoldyz"
+            keyAlias = "kostgoldyz"
+            keyPassword = "kostgoldyz"
+        }
     }
 
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("kost")
+        }
         release {
+            signingConfig = signingConfigs.getByName("kost")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -32,6 +46,5 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-ktx:1.9.3")
-    implementation("androidx.webkit:webkit:1.12.1")
+    implementation("androidx.browser:browser:1.8.0")
 }
